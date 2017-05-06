@@ -1,0 +1,124 @@
+---
+# tasks file for netiq-sentinel-ssdm-es
+
+- name: default runlevel
+  file:
+    src: /usr/lib/systemd/system/multi-user.target
+    dest: /etc/systemd/system/default.target
+    state: link
+    force: yes
+  tags:
+    - system
+
+- name: set vm.max_map_count
+  sysctl:
+    name: vm.max_map_count
+    value: 262144
+    state: present
+  tags:
+    - system
+
+- name: limits hard nofile
+  lineinfile:
+    path: /etc/security/limits.conf
+    line: "elasticsearch   hard   nofile     65536"
+  tags:
+    - system
+
+- name: limits soft nofile
+  lineinfile:
+    path: /etc/security/limits.conf
+    line: "elasticsearch   soft   nofile     65536"
+  tags:
+    - system
+
+# java
+- name: ensure /usr/java
+  file:
+    path: /usr/java
+    state: directory
+  tags:
+    - java
+
+- name: install jdk
+  unarchive:
+    src: "{{ jdk_tar_gz }}"
+    dest: /usr/java
+  when: false
+  tags:
+    - java
+
+- name: correct java version selected
+  alternatives:
+    name: java
+    link: /usr/bin/java
+    path: /usr/java/jdk1.8.0_131/jre/bin/java
+  tags:
+    - java
+
+- name: install es5
+  zypper:
+    name: https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-5.0.0.rpm
+    disable_gpg_check: yes
+  tags:
+    - es
+
+- name: enable service 
+  systemd:
+    daemon_reload: yes
+    name: elasticsearch
+    enabled: yes
+  tags:
+    - es
+
+- name: Configure elasticsearch 5
+  blockinfile:
+    path: /etc/elasticsearch/elasticsearch.yml
+    block: |
+      cluster.name: Cluster1
+      node.name: s8search
+      network.host: _eth0:ipv4_
+      discovery.zen.ping.unicast.hosts: ["s8search.demo.local"]
+      thread_pool.bulk.queue_size: 300
+      thread_pool.search.queue_size: 10000
+      index.codec: best_compression
+      #path.data: ["/<es1>", "/<es2>"]
+  tags:
+    - es-config
+
+- name: es min heap size
+  lineinfile:
+    path: /etc/elasticsearch/jvm.options
+    regexp: "^-Xms"
+    line: "-Xms4g"
+  tags:
+    - es-config
+
+- name: es max heap size
+  lineinfile:
+    path: /etc/elasticsearch/jvm.options
+    regexp: "^-Xmx"
+    line: "-Xmx4g"
+  tags:
+    - es-config
+
+- name: copy ES securiy plugin
+  copy:
+    src: elasticsearch-security-plugin-8.0.1.0-RELEASE.zip
+    dest: /tmp/
+  tags:
+    - es-plugin
+
+- name: install plugin
+  command: /usr/share/elasticsearch/bin/elasticsearch-plugin install file://localhost/tmp/elasticsearch-security-plugin-8.0.1.0-RELEASE.zip --verbose
+  register: myoutput
+  tags:
+    - es-plugin
+
+- name: enable service elasticsearch
+  systemd:
+    name: elasticsearch
+    state: restarted
+  tags:
+    - es-config
+
