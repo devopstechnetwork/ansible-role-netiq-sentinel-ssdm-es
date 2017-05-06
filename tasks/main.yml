@@ -115,7 +115,7 @@
   tags:
     - es-plugin
 
-- name: enable service elasticsearch
+- name: restart service elasticsearch
   systemd:
     name: elasticsearch
     state: restarted
